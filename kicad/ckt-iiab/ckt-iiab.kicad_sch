@@ -2865,7 +2865,7 @@
     (uuid 2467cd61-43cf-4004-b9d0-e61706c03bea)
     (property "Reference" "SW1" (id 0) (at 107.315 92.075 0))
     (property "Value" "SW_DIP_x08" (id 1) (at 107.315 89.535 0))
-    (property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx08_Slide_6.7x21.88mm_W6.73mm_P2.54mm_LowProfile_JPin" (id 2) (at 107.315 74.93 0)
+    (property "Footprint" "Button_Switch_SMD:SW_DIP_SPSTx08_Slide_6.7x21.88mm_W8.61mm_P2.54mm_LowProfile" (id 2) (at 107.315 74.93 0)
       (effects (font (size 1.27 1.27)) hide)
     )
     (property "Datasheet" "~" (id 3) (at 107.315 74.93 0)
@@ -4308,7 +4308,7 @@
       (reference "R15") (unit 1) (value "1k") (footprint "Resistor_SMD:R_0805_2012Metric")
     )
     (path "/2467cd61-43cf-4004-b9d0-e61706c03bea"
-      (reference "SW1") (unit 1) (value "SW_DIP_x08") (footprint "Button_Switch_SMD:SW_DIP_SPSTx08_Slide_6.7x21.88mm_W6.73mm_P2.54mm_LowProfile_JPin")
+      (reference "SW1") (unit 1) (value "SW_DIP_x08") (footprint "Button_Switch_SMD:SW_DIP_SPSTx08_Slide_6.7x21.88mm_W8.61mm_P2.54mm_LowProfile")
     )
     (path "/440cd841-e13c-451b-8936-057ba0bd1941"
       (reference "TP1") (unit 1) (value "TestPoint") (footprint "TestPoint:TestPoint_Pad_D2.0mm")
