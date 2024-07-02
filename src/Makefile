@@ -40,15 +40,15 @@ FUSE_H  = 0xD4
 FUSE_E  = 0xFF
 
 DEFINES := -DF_CPU=$(F_CPU)
-SRCS = $(BASE_NAME).c
-INCS = 
+SRCS = $(BASE_NAME).c io.c interlocking.c debouncer.c
+INCS = io.h interlocking.h debouncer.h
 
 AVRDUDE = avrdude -P $(PROGRAMMER_PORT) -c $(PROGRAMMER_TYPE) -p $(DEVICE) -B1
 AVRDUDE_SLOW = avrdude -P $(PROGRAMMER_PORT) -c $(PROGRAMMER_TYPE) -p $(DEVICE) -B32
 
 OBJS = ${SRCS:.c=.o}
 INCLUDES = -I.
-CFLAGS  = $(INCLUDES) -Wall -Os -ffunction-sections -Wl,-gc-sections -std=gnu11
+CFLAGS  = $(INCLUDES) -Wall -Os -ffunction-sections -Wl,-gc-sections -std=gnu99
 
 COMPILE = avr-gcc $(DEFINES) $(CFLAGS) -mmcu=$(DEVICE)
 
