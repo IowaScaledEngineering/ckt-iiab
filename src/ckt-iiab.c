@@ -29,63 +29,44 @@ LICENSE:
 #include "interlocking.h"
 #include "debouncer.h"
 
-#define NUM_DIRECTIONS 2
-#define OPPOSITE_DIRECTION(d) ((d)%2)?((d)-1):((d)+1)
+#define OPPOSITE_DIRECTION(d) (((d)==APPROACH_A)?APPROACH_B:APPROACH_A)
 
 typedef enum
 {
-	STATE_IDLE,
-	STATE_DELAY,
-	STATE_REQUEST,
-	STATE_CLEARANCE,
-	STATE_TIMEOUT,
-	STATE_OCCUPIED,
-	STATE_LOCKOUT,
-	STATE_CLEARING,
-	STATE_RESET,
+	STATE_IDLE      = 1,
+	STATE_DELAY     = 0,
+	STATE_REQUEST   = 2,
+	STATE_CLEARANCE = 3,
+	STATE_TIMEOUT   = 4,
+	STATE_OCCUPIED  = 5,
+	STATE_LOCKOUT   = 6,
+	STATE_CLEARING  = 7,
+	STATE_RESET     = 8,
 } InterlockState;
 
-InterlockState state[NUM_DIRECTIONS];
-
 uint8_t timeoutSeconds;
-volatile uint16_t timeoutTimer[NUM_DIRECTIONS];  // decisecs
+volatile uint32_t timeoutTimer;
 
 uint8_t lockoutSeconds;
-volatile uint16_t lockoutTimer[NUM_DIRECTIONS];  // decisecs
+volatile uint32_t lockoutTimer;
 
-
-void InterlockingToSignals(void)
-{
-	uint8_t dir;
-	
-	for(dir=0; dir<NUM_DIRECTIONS; dir++)
-	{
-		switch(state[dir])
-		{
-			case STATE_CLEARANCE:
-			case STATE_TIMEOUT:
-				if(0 == dir)
-					setSignal(APPROACH_A, GREEN);
-				else if(1 == dir)
-					setSignal(APPROACH_B, GREEN);
-				break;
-			default:
-				// Default to most restrictive aspect
-				if(0 == dir)
-					setSignal(APPROACH_A, RED);
-				else if(1 == dir)
-					setSignal(APPROACH_B, RED);
-				break;
-		}
-	}
-}
-
+uint8_t delaySeconds;
+volatile uint32_t delayTimer;
 
 volatile uint32_t millis = 0;
 
 ISR(TIMER0_COMPA_vect) 
 {
 	millis++;
+	
+	if(lockoutTimer)
+		lockoutTimer--;
+	
+	if(timeoutTimer)
+		timeoutTimer--;
+	
+	if(delayTimer)
+		delayTimer--;
 }
 
 uint32_t getMillis()
@@ -103,8 +84,6 @@ uint32_t getMillis()
 
 void init(void)
 {
-	uint8_t i;
-	
 	// Kill watchdog
 	MCUSR = 0;
 	wdt_reset();
@@ -113,10 +92,10 @@ void init(void)
 
 	PORTA = 0x3F;  // Pull-ups on PA0 - PA5
 	DDRA = _BV(PB7);  // Aux LED output
-	PORTB = 0x7F;  // Pull-ups on PB0 - PB2
+	PORTB = 0x7F;  // Drive PB0 - PB3 high.  Pull-ups on PB4 - PB6.
 	setSignal(APPROACH_A, RED);
 	setSignal(APPROACH_B, RED);
-	DDRB = _BV(PB3) | _BV(PB4) | _BV(PB5) | _BV(PB6);
+	DDRB = _BV(PB0) | _BV(PB1) | _BV(PB2) | _BV(PB3);
 
 	TIMSK = 0;                                    // Timer interrupts OFF
 	// Set up Timer/Counter0 for 100Hz clock
@@ -128,23 +107,24 @@ void init(void)
 	sei();
 	wdt_reset();
 
-	for(i=0; i<NUM_DIRECTIONS; i++)
-	{
-		timeoutTimer[i] = 0;
-		timeoutSeconds = 1;
-		lockoutTimer[i] = 0;
-		lockoutSeconds = 1;
-	}
+	timeoutTimer = 0;
+	timeoutSeconds = 10;
+	lockoutTimer = 0;
+	lockoutSeconds = 20;
+	delayTimer = 0;
+	delaySeconds = 7;
 }
 
 
 int main(void)
 {
-	uint8_t dir;
+	Block dir = NONE;
 	uint16_t temp_uint16;
-
+	InterlockState state = STATE_IDLE;
+	
 	// Application initialization
 	init();
+	initializeInputOutput();
 
 	wdt_reset();
 
@@ -169,120 +149,188 @@ int main(void)
 	while(1)
 	{
 		wdt_reset();
-		for(dir=0; dir<NUM_DIRECTIONS; dir++)
+		
+		readInputs();
+		readDipSwitches();
+
+		wdt_reset();
+
+		switch(state)
 		{
-			wdt_reset();
-			switch(state[dir])
-			{
-				case STATE_IDLE:
-					if( approachBlockOccupancy(dir) && !lockoutTimer[dir] )
-					{
-						state[dir] = STATE_DELAY;
-					}
-					break;
+			case STATE_IDLE:
+				if( approachBlockOccupancy(APPROACH_A) && !lockoutTimer )
+				{
+					dir = APPROACH_A;
+				}
+				else if( approachBlockOccupancy(APPROACH_B) && !lockoutTimer )
+				{
+					dir = APPROACH_B;
+				}
 
-				case STATE_DELAY:
-					// Do the delay stuff here
-					state[dir] = STATE_REQUEST;
-					break;
-
-				case STATE_REQUEST:
-					if(requestInterlocking(dir))
-					{
-						// Request for interlocking approved
-						state[dir] = STATE_CLEARANCE;
-					}
-					break;
-
-				case STATE_CLEARANCE:
-					if(interlockingBlockOccupancy())
-					{
-						// Train has entered interlocking, proceed
-						state[dir] = STATE_OCCUPIED;
-					}
-					else if(!approachBlockOccupancy(dir))
-					{
-						// No occupany in approach block, start timeout
-						ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
-						{
-							timeoutTimer[dir] = 10 * timeoutSeconds;
-						}
-						state[dir] = STATE_TIMEOUT;
-					}
-					// Wait here if no exit conditions met
-					break;
-
-				case STATE_TIMEOUT:
+				if(NONE != dir)
+				{
 					ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 					{
-						temp_uint16 = timeoutTimer[dir];
+						delayTimer = 1000 * delaySeconds;
 					}
+					state = STATE_DELAY;
+				}
+				break;
 
-					// Give priority to turnouts, then occupancy, then timeout
-					if(interlockingBlockOccupancy())
-					{
-						// Train has entered interlocking, proceed
-						state[dir] = STATE_OCCUPIED;
-					}
-					else if(approachBlockOccupancy(dir))
-					{
-						// Approach detector covered again, go back
-						state[dir] = STATE_CLEARANCE;
-					}
-					else if(!temp_uint16)
-					{
-						// Timed out.  Reset
-						state[dir] = STATE_RESET;
-					}
-					break;
+			case STATE_DELAY:
+				// Do the delay stuff here
+				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+				{
+					temp_uint16 = delayTimer;
+				}
 
-				case STATE_OCCUPIED:
-					if(!interlockingBlockOccupancy())
-					{
-						// Proceed if interlocking block is clear
-						state[dir] = STATE_LOCKOUT;
-					}
-					else if(approachBlockOccupancy(OPPOSITE_DIRECTION(dir)))
-					{
-						// Opposite approach occupied
-						state[dir] = STATE_CLEARING;
-					}
-					break;
+				if(!temp_uint16)
+				{
+					// Delay expired.  Continue.
+					state = STATE_REQUEST;
+				}
+				break;
 
-				case STATE_LOCKOUT:
-					// Set lockout on opposite approach
+			case STATE_REQUEST:
+				if(requestInterlocking(dir))
+				{
+					// Request for interlocking approved
+					state = STATE_CLEARANCE;
+				}
+				break;
+
+			case STATE_CLEARANCE:
+				if(interlockingBlockOccupancy())
+				{
+					// Train has entered interlocking, proceed
+					state = STATE_OCCUPIED;
+				}
+				else if(!approachBlockOccupancy(dir))
+				{
+					// No occupany in approach block, start timeout
 					ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 					{
-						lockoutTimer[OPPOSITE_DIRECTION(dir)] = 10 * lockoutSeconds;
+						timeoutTimer = 1000 * timeoutSeconds;
 					}
-					state[dir] = STATE_RESET;
-					break;
+					state = STATE_TIMEOUT;
+				}
+				// Wait here if no exit conditions met
+				break;
 
-				case STATE_CLEARING:
-					if(!approachBlockOccupancy(OPPOSITE_DIRECTION(dir)))
+			case STATE_TIMEOUT:
+				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+				{
+					temp_uint16 = timeoutTimer;
+				}
+
+				// Give priority to turnouts, then occupancy, then timeout
+				if(interlockingBlockOccupancy())
+				{
+					// Train has entered interlocking, proceed
+					state = STATE_OCCUPIED;
+				}
+				else if(approachBlockOccupancy(dir))
+				{
+					// Approach detector covered again, go back
+					state = STATE_CLEARANCE;
+				}
+				else if(!temp_uint16)
+				{
+					// Timed out.  Reset
+					state = STATE_RESET;
+				}
+				break;
+
+			case STATE_OCCUPIED:
+				if(!interlockingBlockOccupancy())
+				{
+					// Interlocking block is clear, start lockout timer
+					ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 					{
-						// Opposite approach cleared
-						state[dir] = STATE_RESET;
+						lockoutTimer = 1000 * lockoutSeconds;
 					}
-					break;
+					state = STATE_LOCKOUT;
+				}
+				else if(approachBlockOccupancy(OPPOSITE_DIRECTION(dir)))
+				{
+					// Opposite approach occupied
+					state = STATE_CLEARING;
+				}
+				break;
 
-				case STATE_RESET:
-					clearInterlocking();
-					state[dir] = STATE_IDLE;
-					break;
-			}
+			case STATE_LOCKOUT:
+				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+				{
+					temp_uint16 = lockoutTimer;
+				}
+
+				if(!temp_uint16)
+				{
+					// Timed out.  Reset
+					state = STATE_RESET;
+				}
+				break;
+
+			case STATE_CLEARING:
+				if(!approachBlockOccupancy(OPPOSITE_DIRECTION(dir)))
+				{
+					// Opposite approach cleared
+					state = STATE_RESET;
+				}
+				break;
+
+			case STATE_RESET:
+				clearInterlocking();
+				dir = NONE;
+				state = STATE_IDLE;
+				break;
 		}
 
-		InterlockingToSignals();
-		readInputs();
-		
+		// Set Signals
+		switch(state)
+		{
+			case STATE_CLEARANCE:
+			case STATE_TIMEOUT:
+				if(APPROACH_A == dir)
+					setSignal(APPROACH_A, GREEN);
+				else if(APPROACH_B == dir)
+					setSignal(APPROACH_B, GREEN);
+				break;
+			default:
+				// Default to most restrictive aspect
+				setSignal(APPROACH_A, RED);
+				setSignal(APPROACH_B, RED);
+				break;
+		}
+
+		wdt_reset();
+
 		// Blink codes
 		uint32_t tempMillis = getMillis();
-		uint8_t blinkSeq = (tempMillis % 1000) / 50;
-		if(blinkCode[blinkSeq])
-			setAuxLed();
+		uint8_t blinkSeq;
+		if(STATE_DELAY == state)
+		{
+			if(!(tempMillis % 500))
+			{
+				if(!(tempMillis % 1000))
+					setAuxLed();
+				else
+					clearAuxLed();
+			}
+		}
 		else
-			clearAuxLed();
+		{
+			blinkSeq = (tempMillis % 4000) / 100;  // Create 20 states (0-19)
+			if(blinkSeq < state*4)
+			{
+				if(blinkSeq % 4)
+					clearAuxLed();
+				else
+					setAuxLed();
+			}
+			else
+				clearAuxLed();
+		}
 	}
 }
 

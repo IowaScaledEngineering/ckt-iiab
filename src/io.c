@@ -6,6 +6,29 @@
 
 DebounceState8_t inputDebouncer;
 
+bool randomDelay;
+uint8_t delaySetting;
+uint8_t timeoutSetting;
+
+void initializeInputOutput()
+{
+	ADMUX  = 0b00000101;  // VCC reference voltage; right-adjust; ADC5 (PA6)
+	ADCSRA = 0b10100111;  // ADC enabled; Auto trigger; 1/128 prescaler
+	ADCSRB = 0b10000000;  // Unipolar; 1x gain; Free running mode
+	DIDR0 |= _BV(ADC5D);  // Disabled ADC5 digital input buffer
+	
+	ADCSRA |= _BV(ADSC);  // Start the first conversion
+}
+
+void readDipSwitches()
+{
+	randomDelay = (_BV(PA4) != (PINA & _BV(PA4)));
+	
+	delaySetting = PINA & 0xF;
+	
+	// Read ADC for timeout
+}
+
 // Inputs (bit / io / name):  
 //  0 - PB0 - Approach A
 //  1 - PB1 - Approach B
@@ -14,13 +37,15 @@ DebounceState8_t inputDebouncer;
 void readInputs()
 {
 	static uint32_t lastRead = 0;
+	uint32_t millisTemp;
 	uint8_t currentInputState = 0;
 
-	if ((millis - lastRead) > 10)
+	millisTemp = getMillis();
+	if ((millisTemp - lastRead) > 10)
 	{
-		lastRead = millis;
+		lastRead = millisTemp;
 
-		currentInputState = ~( (PINB & _BV(PB0)) | (PINB & _BV(PB1)) | (PINB & _BV(PB2)) );
+		currentInputState = ~( (PINB & _BV(PB4)) | (PINB & _BV(PB5)) | (PINB & _BV(PB6)) );
 		debounce8(currentInputState, &inputDebouncer);
 	} 
 }
@@ -38,8 +63,10 @@ bool getInput(Block input)
 		case DIAMOND:
 			return( 0 != (getDebouncedState(&inputDebouncer) & _BV(2)) );
 			break;
+		default:
+			return false;
+			break;
 	}
-	return false;
 }
 
 bool approachBlockOccupancy(uint8_t direction)
@@ -71,12 +98,12 @@ void setSignal(Block block, Aspect aspect)
 			switch(aspect)
 			{
 				case RED:
-					PORTB &= ~(_BV(PB3));
-					PORTB |= _BV(PB4);
+					PORTB &= ~(_BV(PB0));
+					PORTB |= _BV(PB1);
 					break;
 				case GREEN:
-					PORTB |= _BV(PB3);
-					PORTB &= ~(_BV(PB4));
+					PORTB |= _BV(PB0);
+					PORTB &= ~(_BV(PB1));
 					break;
 			}
 			break;
@@ -84,12 +111,12 @@ void setSignal(Block block, Aspect aspect)
 			switch(aspect)
 			{
 				case RED:
-					PORTB &= ~(_BV(PB5));
-					PORTB |= _BV(PB6);
+					PORTB &= ~(_BV(PB2));
+					PORTB |= _BV(PB3);
 					break;
 				case GREEN:
-					PORTB |= _BV(PB5);
-					PORTB &= ~(_BV(PB6));
+					PORTB |= _BV(PB2);
+					PORTB &= ~(_BV(PB3));
 					break;
 			}
 			break;

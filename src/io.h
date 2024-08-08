@@ -6,8 +6,9 @@
 typedef enum
 {
 	APPROACH_A = 0,
-	APPROACH_B,
+	APPROACH_B = 1,
 	DIAMOND,
+	NONE,
 } Block;
 
 typedef enum
@@ -16,8 +17,10 @@ typedef enum
 	GREEN,
 } Aspect;
 
-extern volatile uint32_t millis;
+extern uint32_t getMillis();
 
+void initializeInputOutput();
+void readDipSwitches();
 void readInputs();
 bool getInput(Block input);
 bool approachBlockOccupancy(uint8_t direction);
