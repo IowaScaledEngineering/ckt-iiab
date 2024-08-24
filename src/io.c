@@ -30,9 +30,9 @@ void readDipSwitches()
 }
 
 // Inputs (bit / io / name):  
-//  0 - PB0 - Approach A
-//  1 - PB1 - Approach B
-//  2 - PB2 - Diamond
+//  0 - PB4 - Approach A
+//  1 - PB5 - Approach B
+//  2 - PB6 - Diamond
 
 void readInputs()
 {
@@ -45,7 +45,7 @@ void readInputs()
 	{
 		lastRead = millisTemp;
 
-		currentInputState = ~( (PINB & _BV(PB4)) | (PINB & _BV(PB5)) | (PINB & _BV(PB6)) );
+		currentInputState = ~( ((PINB & _BV(PB4))>>4) | ((PINB & _BV(PB5))>>4) | ((PINB & _BV(PB6))>>4) );
 		debounce8(currentInputState, &inputDebouncer);
 	} 
 }

@@ -97,7 +97,7 @@ void init(void)
 	setSignal(APPROACH_B, RED);
 	DDRB = _BV(PB0) | _BV(PB1) | _BV(PB2) | _BV(PB3);
 
-	TIMSK = 0;                                    // Timer interrupts OFF
+	TIMSK = 0;  // Timer interrupts OFF
 	// Set up Timer/Counter0 for 100Hz clock
 	TCCR0A = 0b00000001;  // CTC Mode
 	TCCR0B = 0b00000011;  // CS01 + CS00 - 1/64 prescale
@@ -145,6 +145,8 @@ int main(void)
 	_delay_ms(500);
 	wdt_reset();
 	clearAuxLed();
+	
+	clearInterlocking();
 	
 	while(1)
 	{
