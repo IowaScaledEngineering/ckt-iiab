@@ -1,0 +1,10 @@
+** Drc report for /home/ndholmes/data/projects/ckt-iiab/kicad/ckt-iiab/ckt-iiab.kicad_pcb **
+** Created on 2024-08-26 14:20:01 **
+
+** Found 0 DRC violations **
+
+** Found 0 unconnected pads **
+
+** Found 0 Footprint errors **
+
+** End of Report **
