@@ -13,7 +13,8 @@ typedef enum
 
 typedef enum
 {
-	RED = 0,
+	OFF,
+	RED,
 	GREEN,
 } Aspect;
 
@@ -35,8 +36,8 @@ void initializeInputOutput();
 void readDipSwitches();
 uint8_t getDelaySetting();
 uint8_t getTimeoutSetting();
-bool getRandomDelay();
-bool getSearchlight();
+bool isRandomized();
+bool isSearchlight();
 void readInputs();
 bool getInput(Block input);
 bool approachBlockOccupancy(uint8_t direction);

@@ -30,7 +30,7 @@ void readDipSwitches()
 {
 	uint8_t adcVal;
 
-	delaySetting = PINA & 0xF;
+	delaySetting = ~PINA & 0x0F;
 	
 	// Read ADC for random, searchlight
 	wdt_reset();
@@ -87,12 +87,12 @@ uint8_t getTimeoutSetting(void)
 	return timeoutSetting;
 }
 
-bool getRandomDelay(void)
+bool isRandomized(void)
 {
 	return randomDelay;
 }
 
-bool getSearchlight(void)
+bool isSearchlight(void)
 {
 	return searchlight;
 }
@@ -174,6 +174,19 @@ void setSignal(Block block, Aspect aspect)
 				PORTB |= _BV(PB0);
 				PORTB &= ~(_BV(PB1));
 			}
+			else if(OFF == aspect)
+			{
+				if(isCommonAnode())
+				{
+					PORTB |= _BV(PB0);
+					PORTB |= _BV(PB1);
+				}
+				else
+				{
+					PORTB &= ~(_BV(PB0));
+					PORTB &= ~(_BV(PB1));
+				}
+			}
 			break;
 		case APPROACH_B:
 			if( ((RED == aspect) & isCommonAnode()) || ((GREEN == aspect) & !isCommonAnode()) )
@@ -185,6 +198,19 @@ void setSignal(Block block, Aspect aspect)
 			{
 				PORTB |= _BV(PB2);
 				PORTB &= ~(_BV(PB3));
+			}
+			else if(OFF == aspect)
+			{
+				if(isCommonAnode())
+				{
+					PORTB |= _BV(PB2);
+					PORTB |= _BV(PB3);
+				}
+				else
+				{
+					PORTB &= ~(_BV(PB2));
+					PORTB &= ~(_BV(PB3));
+				}
 			}
 			break;
 		default:

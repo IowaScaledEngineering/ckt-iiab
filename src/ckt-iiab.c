@@ -91,11 +91,12 @@ void init(void)
 	WDTCR = _BV(WDE) | _BV(WDP2) | _BV(WDP1);   // Enable WDT (1s)
 	wdt_reset();
 
+
 	PORTA = 0x0F;  // Pull-ups on PA0 - PA3
 	DDRA = _BV(PA7);  // Aux LED output
-	PORTB = 0x7F;  // Drive PB0 - PB3 high.  Pull-ups on PB4 - PB6.
-	setSignal(APPROACH_A, RED);
-	setSignal(APPROACH_B, RED);
+	PORTB = 0x70;  // Pull-ups on PB4 - PB6
+	setSignal(APPROACH_A, OFF);
+	setSignal(APPROACH_B, OFF);
 	DDRB = _BV(PB0) | _BV(PB1) | _BV(PB2) | _BV(PB3);
 
 	TIMSK = 0;  // Timer interrupts OFF
@@ -113,14 +114,14 @@ void init(void)
 	lockoutTimer = 0;
 	lockoutSeconds = 0;
 	delayTimer = 0;
-	delaySeconds = 3;
+	delaySeconds = 0;
 }
 
 
 int main(void)
 {
 	Block dir = NONE;
-	uint16_t temp_uint16;
+	uint32_t temp_uint32;
 	InterlockState state = STATE_IDLE;
 	
 	// Application initialization
@@ -174,8 +175,7 @@ int main(void)
 	
 	clearInterlocking();
 
-// FIXME: Add CA/CC detection and change
-//        Tie in delay settings
+// FIXME: 
 //        Randomized delays
 //        Searchlight code
 	
@@ -187,6 +187,18 @@ int main(void)
 		readDipSwitches();
 		timeoutSeconds = 15 + (getTimeoutSetting() * 15);  // 15, 30, 45, 60s
 		lockoutSeconds = timeoutSeconds;
+
+		uint8_t delaySetting = getDelaySetting();
+		if(isRandomized())
+		{
+			// FIXME: do the random thing
+			delaySeconds = 1;
+		}
+		else
+		{
+			// Fixed delays
+			delaySeconds = delaySetting * 5;
+		}
 
 		wdt_reset();
 
@@ -219,10 +231,10 @@ int main(void)
 				// Do the delay stuff here
 				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 				{
-					temp_uint16 = delayTimer;
+					temp_uint32 = delayTimer;
 				}
 
-				if(!temp_uint16)
+				if(!temp_uint32)
 				{
 					// Delay expired.  Continue.
 					state = STATE_REQUEST;
@@ -267,7 +279,7 @@ int main(void)
 				setStatusLed(STATUS_WHITE);
 				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 				{
-					temp_uint16 = timeoutTimer;
+					temp_uint32 = timeoutTimer;
 				}
 
 				// Give priority to turnouts, then occupancy, then timeout
@@ -281,7 +293,7 @@ int main(void)
 					// Approach detector covered again, go back
 					state = STATE_CLEARANCE;
 				}
-				else if(!temp_uint16)
+				else if(!temp_uint32)
 				{
 					// Timed out.  Reset
 					state = STATE_RESET;
@@ -310,10 +322,10 @@ int main(void)
 				setStatusLed(STATUS_BLUE);
 				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 				{
-					temp_uint16 = lockoutTimer;
+					temp_uint32 = lockoutTimer;
 				}
 
-				if(!temp_uint16)
+				if(!temp_uint32)
 				{
 					// Timed out.  Reset
 					state = STATE_RESET;
