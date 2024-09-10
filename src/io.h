@@ -17,17 +17,32 @@ typedef enum
 	GREEN,
 } Aspect;
 
+typedef enum
+{
+	STATUS_RED,
+	STATUS_YELLOW,
+	STATUS_GREEN,
+	STATUS_BLUE,
+	STATUS_PURPLE,
+	STATUS_WHITE,
+	STATUS_OFF,
+	STATUS_UNKNOWN,
+} Status;
+
 extern uint32_t getMillis();
 
 void initializeInputOutput();
 void readDipSwitches();
+uint8_t getDelaySetting();
+uint8_t getTimeoutSetting();
+bool getRandomDelay();
+bool getSearchlight();
 void readInputs();
 bool getInput(Block input);
 bool approachBlockOccupancy(uint8_t direction);
 bool interlockingBlockOccupancy(void);
 
 void setSignal(Block block, Aspect aspect);
-void setAuxLed(void);
-void clearAuxLed(void);
+void setStatusLed(Status status);
 
 #endif

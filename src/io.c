@@ -1,38 +1,107 @@
 #include <avr/io.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <avr/wdt.h>
 #include "io.h"
 #include "debouncer.h"
+#include "light_ws2812.h"
 
 DebounceState8_t inputDebouncer;
 
 bool randomDelay;
+bool searchlight;
 uint8_t delaySetting;
 uint8_t timeoutSetting;
 
 void initializeInputOutput()
 {
-	ADMUX  = 0b00000101;  // VCC reference voltage; right-adjust; ADC5 (PA6)
-	ADCSRA = 0b10100111;  // ADC enabled; Auto trigger; 1/128 prescaler
-	ADCSRB = 0b10000000;  // Unipolar; 1x gain; Free running mode
-	DIDR0 |= _BV(ADC5D);  // Disabled ADC5 digital input buffer
-	
-	ADCSRA |= _BV(ADSC);  // Start the first conversion
+	ADMUX  = 0b00100011;  // VCC reference voltage; left-adjust; ADC3 (PA4)
+	ADCSRA = 0b10000111;  // ADC enabled; Manual trigger; 1/128 prescaler
+	ADCSRB = 0b00000000;  // Unipolar; 1x gain; Free running mode
+	DIDR0 |= _BV(ADC3D) | _BV(ADC4D);  // Disable ADC3 (PA4) and ADC4 (PA5) digital input buffer
+}
+
+bool isCommonAnode(void)
+{
+	return ((PINA & _BV(PA6)) == _BV(PA6));
 }
 
 void readDipSwitches()
 {
-	randomDelay = (_BV(PA4) != (PINA & _BV(PA4)));
-	
+	uint8_t adcVal;
+
 	delaySetting = PINA & 0xF;
 	
+	// Read ADC for random, searchlight
+	wdt_reset();
+	ADMUX &= ~(_BV(MUX2)); //  ADC3 (PA4)
+	ADMUX |= _BV(MUX1) | _BV(MUX0);
+	ADCSRA |= _BV(ADSC);  // Start the conversion
+	while(ADCSRA & _BV(ADSC));  // Wait for conversion to complete; no WD reset in case it takes too long
+	adcVal = ADCH;
+	if(adcVal > 212)
+	{
+		searchlight = 0;
+		randomDelay = 0;
+	}
+	else if(adcVal > 149)
+	{
+		searchlight = 1;
+		randomDelay = 0;
+	}
+	else if(adcVal > 115)
+	{
+		searchlight = 0;
+		randomDelay = 1;
+	}
+	else
+	{
+		searchlight = 1;
+		randomDelay = 1;
+	}
+
 	// Read ADC for timeout
+	wdt_reset();
+	ADMUX |= _BV(MUX2); //  ADC4 (PA5)
+	ADMUX &= ~(_BV(MUX1) | _BV(MUX0));
+	ADCSRA |= _BV(ADSC);  // Start the conversion
+	while(ADCSRA & _BV(ADSC));  // Wait for conversion to complete; no WD reset in case it takes too long
+	adcVal = ADCH;
+	if(adcVal > 212)
+		timeoutSetting = 0;
+	else if(adcVal > 149)
+		timeoutSetting = 1;
+	else if(adcVal > 115)
+		timeoutSetting = 2;
+	else
+		timeoutSetting = 3;
 }
 
-// Inputs (bit / io / name):  
-//  0 - PB4 - Approach A
-//  1 - PB5 - Approach B
-//  2 - PB6 - Diamond
+uint8_t getDelaySetting(void)
+{
+	return delaySetting;
+}
+
+uint8_t getTimeoutSetting(void)
+{
+	return timeoutSetting;
+}
+
+bool getRandomDelay(void)
+{
+	return randomDelay;
+}
+
+bool getSearchlight(void)
+{
+	return searchlight;
+}
+
+// Inputs (bit / io / name):
+// Note: Approach B and Diamond labels are swapped on v1.2 hardware, fixed in code
+//  0 - PB4 - Approach B
+//  1 - PB5 - Diamond
+//  2 - PB6 - Approach A
 
 void readInputs()
 {
@@ -55,13 +124,13 @@ bool getInput(Block input)
 	switch(input)
 	{
 		case APPROACH_A:
-			return( 0 != (getDebouncedState(&inputDebouncer) & _BV(0)) );
+			return( 0 != (getDebouncedState(&inputDebouncer) & _BV(2)) );
 			break;
 		case APPROACH_B:
-			return( 0 != (getDebouncedState(&inputDebouncer) & _BV(1)) );
+			return( 0 != (getDebouncedState(&inputDebouncer) & _BV(0)) );
 			break;
 		case DIAMOND:
-			return( 0 != (getDebouncedState(&inputDebouncer) & _BV(2)) );
+			return( 0 != (getDebouncedState(&inputDebouncer) & _BV(1)) );
 			break;
 		default:
 			return false;
@@ -95,29 +164,27 @@ void setSignal(Block block, Aspect aspect)
 	switch(block)
 	{
 		case APPROACH_A:
-			switch(aspect)
+			if( ((RED == aspect) & isCommonAnode()) || ((GREEN == aspect) & !isCommonAnode()) )
 			{
-				case RED:
-					PORTB &= ~(_BV(PB0));
-					PORTB |= _BV(PB1);
-					break;
-				case GREEN:
-					PORTB |= _BV(PB0);
-					PORTB &= ~(_BV(PB1));
-					break;
+				PORTB &= ~(_BV(PB0));
+				PORTB |= _BV(PB1);
+			}
+			else if( ((GREEN == aspect) & isCommonAnode()) || ((RED == aspect) & !isCommonAnode()) )
+			{
+				PORTB |= _BV(PB0);
+				PORTB &= ~(_BV(PB1));
 			}
 			break;
 		case APPROACH_B:
-			switch(aspect)
+			if( ((RED == aspect) & isCommonAnode()) || ((GREEN == aspect) & !isCommonAnode()) )
 			{
-				case RED:
-					PORTB &= ~(_BV(PB2));
-					PORTB |= _BV(PB3);
-					break;
-				case GREEN:
-					PORTB |= _BV(PB2);
-					PORTB &= ~(_BV(PB3));
-					break;
+				PORTB &= ~(_BV(PB2));
+				PORTB |= _BV(PB3);
+			}
+			else if( ((GREEN == aspect) & isCommonAnode()) || ((RED == aspect) & !isCommonAnode()) )
+			{
+				PORTB |= _BV(PB2);
+				PORTB &= ~(_BV(PB3));
 			}
 			break;
 		default:
@@ -126,14 +193,54 @@ void setSignal(Block block, Aspect aspect)
 }
 
 
-void setAuxLed(void)
+void setStatusLed(Status status)
 {
-	PORTA |= _BV(PA7);
+	static Status oldStatus = STATUS_UNKNOWN;
+	struct cRGB led;
+
+	if(status != oldStatus)
+	{
+		switch(status)
+		{
+			case STATUS_RED:
+				led.r = 64;
+				led.g = 0;
+				led.b = 0;
+				break;
+			case STATUS_YELLOW:
+				led.r = 64;
+				led.g = 24;
+				led.b = 0;
+				break;
+			case STATUS_GREEN:
+				led.r = 0;
+				led.g = 64;
+				led.b = 0;
+				break;
+			case STATUS_BLUE:
+				led.r = 0;
+				led.g = 0;
+				led.b = 64;
+				break;
+			case STATUS_PURPLE:
+				led.r = 64;
+				led.g = 0;
+				led.b = 64;
+				break;
+			case STATUS_WHITE:
+				led.r = 64;
+				led.g = 64;
+				led.b = 64;
+				break;
+			case STATUS_OFF:
+				led.r = 0;
+				led.g = 0;
+				led.b = 0;
+				break;
+			case STATUS_UNKNOWN:
+				break;
+		}
+		ws2812_setleds(&led,1);
+		oldStatus = status;
+	}
 }
-
-void clearAuxLed(void)
-{
-	PORTA &= ~(_BV(PA7));
-}
-
-

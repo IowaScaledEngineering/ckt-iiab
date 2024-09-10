@@ -24,6 +24,7 @@ LICENSE:
 #include <avr/wdt.h>
 #include <util/delay.h>
 #include <util/atomic.h>
+#include <avr/interrupt.h>
 
 #include "io.h"
 #include "interlocking.h"
@@ -90,8 +91,8 @@ void init(void)
 	WDTCR = _BV(WDE) | _BV(WDP2) | _BV(WDP1);   // Enable WDT (1s)
 	wdt_reset();
 
-	PORTA = 0x3F;  // Pull-ups on PA0 - PA5
-	DDRA = _BV(PB7);  // Aux LED output
+	PORTA = 0x0F;  // Pull-ups on PA0 - PA3
+	DDRA = _BV(PA7);  // Aux LED output
 	PORTB = 0x7F;  // Drive PB0 - PB3 high.  Pull-ups on PB4 - PB6.
 	setSignal(APPROACH_A, RED);
 	setSignal(APPROACH_B, RED);
@@ -108,11 +109,11 @@ void init(void)
 	wdt_reset();
 
 	timeoutTimer = 0;
-	timeoutSeconds = 10;
+	timeoutSeconds = 0;
 	lockoutTimer = 0;
-	lockoutSeconds = 20;
+	lockoutSeconds = 0;
 	delayTimer = 0;
-	delaySeconds = 7;
+	delaySeconds = 3;
 }
 
 
@@ -129,7 +130,7 @@ int main(void)
 	wdt_reset();
 
 	// Initialization, board check
-	setAuxLed();
+	setStatusLed(STATUS_OFF);
 	_delay_ms(500);
 	wdt_reset();
 	setSignal(APPROACH_A, GREEN);
@@ -144,9 +145,39 @@ int main(void)
 	setSignal(APPROACH_B, RED);
 	_delay_ms(500);
 	wdt_reset();
-	clearAuxLed();
+
+	setStatusLed(STATUS_RED);
+	_delay_ms(500);
+	wdt_reset();
+
+	setStatusLed(STATUS_YELLOW);
+	_delay_ms(500);
+	wdt_reset();
+
+	setStatusLed(STATUS_GREEN);
+	_delay_ms(500);
+	wdt_reset();
+
+	setStatusLed(STATUS_BLUE);
+	_delay_ms(500);
+	wdt_reset();
+
+	setStatusLed(STATUS_PURPLE);
+	_delay_ms(500);
+	wdt_reset();
+
+	setStatusLed(STATUS_WHITE);
+	_delay_ms(500);
+	wdt_reset();
+
+	setStatusLed(STATUS_OFF);
 	
 	clearInterlocking();
+
+// FIXME: Add CA/CC detection and change
+//        Tie in delay settings
+//        Randomized delays
+//        Searchlight code
 	
 	while(1)
 	{
@@ -154,12 +185,16 @@ int main(void)
 		
 		readInputs();
 		readDipSwitches();
+		timeoutSeconds = 15 + (getTimeoutSetting() * 15);  // 15, 30, 45, 60s
+		lockoutSeconds = timeoutSeconds;
 
 		wdt_reset();
 
+		uint32_t tempMillis = getMillis();
 		switch(state)
 		{
 			case STATE_IDLE:
+				setStatusLed(STATUS_OFF);
 				if( approachBlockOccupancy(APPROACH_A) && !lockoutTimer )
 				{
 					dir = APPROACH_A;
@@ -180,6 +215,7 @@ int main(void)
 				break;
 
 			case STATE_DELAY:
+				setStatusLed(STATUS_YELLOW);
 				// Do the delay stuff here
 				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 				{
@@ -194,6 +230,13 @@ int main(void)
 				break;
 
 			case STATE_REQUEST:
+				if(!(tempMillis % 250))
+				{
+					if(!(tempMillis % 500))
+						setStatusLed(STATUS_YELLOW);
+					else
+						setStatusLed(STATUS_OFF);
+				}
 				if(requestInterlocking(dir))
 				{
 					// Request for interlocking approved
@@ -202,6 +245,7 @@ int main(void)
 				break;
 
 			case STATE_CLEARANCE:
+				setStatusLed(STATUS_GREEN);
 				if(interlockingBlockOccupancy())
 				{
 					// Train has entered interlocking, proceed
@@ -220,6 +264,7 @@ int main(void)
 				break;
 
 			case STATE_TIMEOUT:
+				setStatusLed(STATUS_WHITE);
 				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 				{
 					temp_uint16 = timeoutTimer;
@@ -244,6 +289,7 @@ int main(void)
 				break;
 
 			case STATE_OCCUPIED:
+				setStatusLed(STATUS_RED);
 				if(!interlockingBlockOccupancy())
 				{
 					// Interlocking block is clear, start lockout timer
@@ -261,6 +307,7 @@ int main(void)
 				break;
 
 			case STATE_LOCKOUT:
+				setStatusLed(STATUS_BLUE);
 				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 				{
 					temp_uint16 = lockoutTimer;
@@ -274,6 +321,7 @@ int main(void)
 				break;
 
 			case STATE_CLEARING:
+				setStatusLed(STATUS_PURPLE);
 				if(!approachBlockOccupancy(OPPOSITE_DIRECTION(dir)))
 				{
 					// Opposite approach cleared
@@ -294,9 +342,15 @@ int main(void)
 			case STATE_CLEARANCE:
 			case STATE_TIMEOUT:
 				if(APPROACH_A == dir)
+				{
 					setSignal(APPROACH_A, GREEN);
+					setSignal(APPROACH_B, RED);
+				}
 				else if(APPROACH_B == dir)
+				{
+					setSignal(APPROACH_A, RED);
 					setSignal(APPROACH_B, GREEN);
+				}
 				break;
 			default:
 				// Default to most restrictive aspect
@@ -307,32 +361,6 @@ int main(void)
 
 		wdt_reset();
 
-		// Blink codes
-		uint32_t tempMillis = getMillis();
-		uint8_t blinkSeq;
-		if(STATE_DELAY == state)
-		{
-			if(!(tempMillis % 500))
-			{
-				if(!(tempMillis % 1000))
-					setAuxLed();
-				else
-					clearAuxLed();
-			}
-		}
-		else
-		{
-			blinkSeq = (tempMillis % 4000) / 100;  // Create 20 states (0-19)
-			if(blinkSeq < state*4)
-			{
-				if(blinkSeq % 4)
-					clearAuxLed();
-				else
-					setAuxLed();
-			}
-			else
-				clearAuxLed();
-		}
 	}
 }
 
