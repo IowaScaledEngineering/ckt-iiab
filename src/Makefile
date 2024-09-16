@@ -40,8 +40,8 @@ FUSE_H  = 0xD4
 FUSE_E  = 0xFF
 
 DEFINES := -DF_CPU=$(F_CPU)
-SRCS = $(BASE_NAME).c io.c interlocking.c debouncer.c light_ws2812.c
-INCS = io.h interlocking.h debouncer.h light_ws2812.h
+SRCS = $(BASE_NAME).c io.c interlocking.c debouncer.c light_ws2812.c signalHead.c
+INCS = io.h interlocking.h debouncer.h light_ws2812.h signalHead.h signalAspect.h signalHeadPWM.h
 
 AVRDUDE = avrdude -P $(PROGRAMMER_PORT) -c $(PROGRAMMER_TYPE) -p $(DEVICE) -B1
 AVRDUDE_SLOW = avrdude -P $(PROGRAMMER_PORT) -c $(PROGRAMMER_TYPE) -p $(DEVICE) -B32

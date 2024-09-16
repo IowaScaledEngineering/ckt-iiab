@@ -5,8 +5,12 @@
 #include "io.h"
 #include "debouncer.h"
 #include "light_ws2812.h"
+#include "signalHead.h"
 
 DebounceState8_t inputDebouncer;
+
+extern volatile uint8_t signalHeadOptions;
+
 
 bool randomDelay;
 bool searchlight;
@@ -29,6 +33,7 @@ bool isCommonAnode(void)
 void readDipSwitches()
 {
 	uint8_t adcVal;
+	uint8_t newSignalHeadOptions = 0;
 
 	delaySetting = ~PINA & 0x0F;
 	
@@ -75,6 +80,11 @@ void readDipSwitches()
 		timeoutSetting = 2;
 	else
 		timeoutSetting = 3;
+		
+
+	newSignalHeadOptions = isCommonAnode()?SIGNAL_OPTION_COMMON_ANODE:0;
+	newSignalHeadOptions |= searchlight?SIGNAL_OPTION_SEARCHLIGHT:0;
+	signalHeadOptions = newSignalHeadOptions;
 }
 
 uint8_t getDelaySetting(void)

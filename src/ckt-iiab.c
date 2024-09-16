@@ -29,6 +29,7 @@ LICENSE:
 #include "io.h"
 #include "interlocking.h"
 #include "debouncer.h"
+#include "signalHead.h"
 
 #define OPPOSITE_DIRECTION(d) (((d)==APPROACH_A)?APPROACH_B:APPROACH_A)
 
@@ -53,21 +54,74 @@ volatile uint32_t lockoutTimer;
 
 uint8_t delaySeconds;
 volatile uint32_t delayTimer;
-
 volatile uint32_t millis = 0;
+
+SignalState_t signalA;
+SignalState_t signalB;
+volatile uint8_t signalHeadOptions;
+
+// Signal Port Connections
+// These are in the order of:
+//  Red address, bitmask
+//  Yellow address, bitmask
+//  Green address, bitmask
+
+#define SIGNAL_HEAD_A_DEF   &PORTB, _BV(PB0), &PORTB, 0, &PORTB, _BV(PB1)
+#define SIGNAL_HEAD_B_DEF   &PORTB, _BV(PB2), &PORTB, 0, &PORTB, _BV(PB3)
 
 ISR(TIMER0_COMPA_vect) 
 {
-	millis++;
+	static uint8_t flasherCounter = 0;
+	static uint8_t flasher = 0;
+	static uint8_t pwmPhase = 0;
+	static uint8_t subMillisCounter = 0;
 	
-	if(lockoutTimer)
-		lockoutTimer--;
+	// The ISR does two main things - updates the LED outputs since
+	//  PWM is done through software, and updates millis which is used
+	//  to trigger various events
+	// We need this to run at roughly 125 Hz * number of PWM levels (32).  That makes a nice round 4kHz
 	
-	if(timeoutTimer)
-		timeoutTimer--;
-	
-	if(delayTimer)
-		delayTimer--;
+	// First thing, output the signals so that the PWM doesn't get too much jitter
+
+	signalHeadISR_OutputPWM(&signalA, signalHeadOptions, pwmPhase, SIGNAL_HEAD_A_DEF);
+	signalHeadISR_OutputPWM(&signalB, signalHeadOptions, pwmPhase, SIGNAL_HEAD_B_DEF);
+
+	// Now do all the counter incrementing and such
+	// This will run every millisecond since the timer is running at 4kHz
+	if (++subMillisCounter >= 4)
+	{
+		subMillisCounter = 0;
+		millis++;
+
+		if(lockoutTimer)
+			lockoutTimer--;
+		
+		if(timeoutTimer)
+			timeoutTimer--;
+		
+		if(delayTimer)
+			delayTimer--;
+
+	}
+
+	pwmPhase = (pwmPhase + 1) & 0x1F;
+
+	if (0 == pwmPhase)
+	{
+		pwmPhase = 0;
+		flasherCounter++;
+		if (flasherCounter > 94)
+		{
+			flasher ^= 0x01;
+			flasherCounter = 0;
+		}
+
+		// We rolled over the PWM counter, calculate the next PWM widths
+		// This runs at 125 frames/second essentially
+
+		signalHeadISR_AspectToNextPWM(&signalA, flasher, signalHeadOptions);
+		signalHeadISR_AspectToNextPWM(&signalB, flasher, signalHeadOptions);
+	}
 }
 
 uint32_t getMillis()
@@ -81,7 +135,15 @@ uint32_t getMillis()
 	return retmillis;
 }
 
-
+void initializeTimer()
+{
+	TIMSK = 0;                                    // Timer interrupts OFF
+	// Set up Timer/Counter0 for 100Hz clock
+	TCCR0A = 0b00000001;  // CTC Mode
+	TCCR0B = 0b00000010;  // CS01 - 1:8 prescaler
+	OCR0A = 250;           // 8MHz / 8 / 125 = 8kHz
+	TIMSK = _BV(OCIE0A);
+}
 
 void init(void)
 {
@@ -95,16 +157,15 @@ void init(void)
 	PORTA = 0x0F;  // Pull-ups on PA0 - PA3
 	DDRA = _BV(PA7);  // Aux LED output
 	PORTB = 0x70;  // Pull-ups on PB4 - PB6
-	setSignal(APPROACH_A, OFF);
-	setSignal(APPROACH_B, OFF);
 	DDRB = _BV(PB0) | _BV(PB1) | _BV(PB2) | _BV(PB3);
 
-	TIMSK = 0;  // Timer interrupts OFF
-	// Set up Timer/Counter0 for 100Hz clock
-	TCCR0A = 0b00000001;  // CTC Mode
-	TCCR0B = 0b00000011;  // CS01 + CS00 - 1/64 prescale
-	OCR0A = 125;           // 8MHz / 64 / 125 = 1kHz
-	TIMSK = _BV(OCIE0A);
+	initializeTimer();
+
+	signalHeadInitialize(&signalA);
+	signalHeadInitialize(&signalB);
+
+	signalHeadAspectSet(&signalA, ASPECT_RED);
+	signalHeadAspectSet(&signalB, ASPECT_RED);
 
 	sei();
 	wdt_reset();
@@ -128,22 +189,28 @@ int main(void)
 	init();
 	initializeInputOutput();
 
+	signalHeadOptions = isCommonAnode()?SIGNAL_OPTION_COMMON_ANODE:0;
+
 	wdt_reset();
 
 	// Initialization, board check
 	setStatusLed(STATUS_OFF);
 	_delay_ms(500);
 	wdt_reset();
-	setSignal(APPROACH_A, GREEN);
+	
+	signalHeadAspectSet(&signalA, ASPECT_GREEN);
 	_delay_ms(500);
 	wdt_reset();
-	setSignal(APPROACH_A, RED);
+
+	signalHeadAspectSet(&signalA, ASPECT_RED);
 	_delay_ms(500);
 	wdt_reset();
-	setSignal(APPROACH_B, GREEN);
+	
+	signalHeadAspectSet(&signalB, ASPECT_GREEN);
 	_delay_ms(500);
 	wdt_reset();
-	setSignal(APPROACH_B, RED);
+
+	signalHeadAspectSet(&signalB, ASPECT_RED);
 	_delay_ms(500);
 	wdt_reset();
 
@@ -355,19 +422,19 @@ int main(void)
 			case STATE_TIMEOUT:
 				if(APPROACH_A == dir)
 				{
-					setSignal(APPROACH_A, GREEN);
-					setSignal(APPROACH_B, RED);
+					signalHeadAspectSet(&signalA, ASPECT_GREEN);
+					signalHeadAspectSet(&signalB, ASPECT_RED);
 				}
 				else if(APPROACH_B == dir)
 				{
-					setSignal(APPROACH_A, RED);
-					setSignal(APPROACH_B, GREEN);
+					signalHeadAspectSet(&signalA, ASPECT_RED);
+					signalHeadAspectSet(&signalB, ASPECT_GREEN);
 				}
 				break;
 			default:
 				// Default to most restrictive aspect
-				setSignal(APPROACH_A, RED);
-				setSignal(APPROACH_B, RED);
+				signalHeadAspectSet(&signalA, ASPECT_RED);
+				signalHeadAspectSet(&signalB, ASPECT_RED);
 				break;
 		}
 
