@@ -43,7 +43,6 @@ bool getInput(Block input);
 bool approachBlockOccupancy(uint8_t direction);
 bool interlockingBlockOccupancy(void);
 
-void setSignal(Block block, Aspect aspect);
 void setStatusLed(Status status);
 bool isCommonAnode(void);
 

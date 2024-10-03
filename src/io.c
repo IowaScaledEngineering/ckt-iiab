@@ -169,65 +169,6 @@ bool interlockingBlockOccupancy(void)
 	return getInput(DIAMOND);
 }
 
-void setSignal(Block block, Aspect aspect)
-{
-	switch(block)
-	{
-		case APPROACH_A:
-			if( ((RED == aspect) & isCommonAnode()) || ((GREEN == aspect) & !isCommonAnode()) )
-			{
-				PORTB &= ~(_BV(PB0));
-				PORTB |= _BV(PB1);
-			}
-			else if( ((GREEN == aspect) & isCommonAnode()) || ((RED == aspect) & !isCommonAnode()) )
-			{
-				PORTB |= _BV(PB0);
-				PORTB &= ~(_BV(PB1));
-			}
-			else if(OFF == aspect)
-			{
-				if(isCommonAnode())
-				{
-					PORTB |= _BV(PB0);
-					PORTB |= _BV(PB1);
-				}
-				else
-				{
-					PORTB &= ~(_BV(PB0));
-					PORTB &= ~(_BV(PB1));
-				}
-			}
-			break;
-		case APPROACH_B:
-			if( ((RED == aspect) & isCommonAnode()) || ((GREEN == aspect) & !isCommonAnode()) )
-			{
-				PORTB &= ~(_BV(PB2));
-				PORTB |= _BV(PB3);
-			}
-			else if( ((GREEN == aspect) & isCommonAnode()) || ((RED == aspect) & !isCommonAnode()) )
-			{
-				PORTB |= _BV(PB2);
-				PORTB &= ~(_BV(PB3));
-			}
-			else if(OFF == aspect)
-			{
-				if(isCommonAnode())
-				{
-					PORTB |= _BV(PB2);
-					PORTB |= _BV(PB3);
-				}
-				else
-				{
-					PORTB &= ~(_BV(PB2));
-					PORTB &= ~(_BV(PB3));
-				}
-			}
-			break;
-		default:
-			return;
-	}
-}
-
 
 void setStatusLed(Status status)
 {

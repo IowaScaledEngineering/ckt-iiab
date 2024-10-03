@@ -183,6 +183,7 @@ int main(void)
 {
 	Block dir = NONE;
 	uint32_t temp_uint32;
+	uint16_t delayMin, delayMax;
 	InterlockState state = STATE_IDLE;
 	
 	// Application initialization
@@ -242,10 +243,6 @@ int main(void)
 	
 	clearInterlocking();
 
-// FIXME: 
-//        Randomized delays
-//        Searchlight code
-	
 	while(1)
 	{
 		wdt_reset();
@@ -254,12 +251,85 @@ int main(void)
 		readDipSwitches();
 		timeoutSeconds = 15 + (getTimeoutSetting() * 15);  // 15, 30, 45, 60s
 		lockoutSeconds = timeoutSeconds;
-
+		
 		uint8_t delaySetting = getDelaySetting();
 		if(isRandomized())
 		{
-			// FIXME: do the random thing
-			delaySeconds = 1;
+			// Do something random
+			delayMin = 0;
+			delayMax = 0;
+			switch(delaySetting)
+			{
+				case 0:
+					delayMin = 0;
+					delayMax = 5;
+					break;
+				case 1:
+					delayMin = 0;
+					delayMax = 10;
+					break;
+				case 2:
+					delayMin = 0;
+					delayMax = 15;
+					break;
+				case 3:
+					delayMin = 0;
+					delayMax = 20;
+					break;
+
+				case 4:
+					delayMin = 5;
+					delayMax = 15;
+					break;
+				case 5:
+					delayMin = 5;
+					delayMax = 20;
+					break;
+				case 6:
+					delayMin = 5;
+					delayMax = 25;
+					break;
+				case 7:
+					delayMin = 5;
+					delayMax = 30;
+					break;
+
+				case 8:
+					delayMin = 15;
+					delayMax = 30;
+					break;
+				case 9:
+					delayMin = 15;
+					delayMax = 40;
+					break;
+				case 10:
+					delayMin = 15;
+					delayMax = 50;
+					break;
+				case 11:
+					delayMin = 15;
+					delayMax = 60;
+					break;
+
+				case 12:
+					delayMin = 30;
+					delayMax = 60;
+					break;
+				case 13:
+					delayMin = 30;
+					delayMax = 120;
+					break;
+
+				case 14:
+					delayMin = 60;
+					delayMax = 120;
+					break;
+				case 15:
+					delayMin = 60;
+					delayMax = 300;
+					break;
+			}
+			delaySeconds = (random() % (delayMax - delayMin + 1)) + delayMin;
 		}
 		else
 		{
@@ -285,6 +355,8 @@ int main(void)
 
 				if(NONE != dir)
 				{
+					srandom(getMillis());  // Re-seed the random generator for next time
+
 					ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 					{
 						delayTimer = 1000 * delaySeconds;
