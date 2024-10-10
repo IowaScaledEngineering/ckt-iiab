@@ -20,6 +20,7 @@ LICENSE:
 *************************************************************************/
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include <avr/io.h>
 #include <avr/wdt.h>
 #include <util/delay.h>
@@ -30,6 +31,14 @@ LICENSE:
 #include "interlocking.h"
 #include "debouncer.h"
 #include "signalHead.h"
+
+typedef enum
+{
+	DELAY_PCNT_NONE = 0,
+	DELAY_PCNT_LOW,
+	DELAY_PCNT_MID,
+	DELAY_PCNT_HIGH,
+} DelayPcnt;
 
 #define OPPOSITE_DIRECTION(d) (((d)==APPROACH_A)?APPROACH_B:APPROACH_A)
 
@@ -46,13 +55,13 @@ typedef enum
 	STATE_RESET     = 8,
 } InterlockState;
 
-uint8_t timeoutSeconds;
+uint32_t timeoutSeconds;
 volatile uint32_t timeoutTimer;
 
-uint8_t lockoutSeconds;
+uint32_t lockoutSeconds;
 volatile uint32_t lockoutTimer;
 
-uint8_t delaySeconds;
+uint32_t delaySeconds;
 volatile uint32_t delayTimer;
 volatile uint32_t millis = 0;
 
@@ -183,8 +192,10 @@ int main(void)
 {
 	Block dir = NONE;
 	uint32_t temp_uint32;
-	uint16_t delayMin, delayMax;
+	uint32_t delayMin, delayMax;
+	DelayPcnt delayPcnt;
 	InterlockState state = STATE_IDLE;
+	bool first = true;
 	
 	// Application initialization
 	init();
@@ -252,90 +263,6 @@ int main(void)
 		timeoutSeconds = 15 + (getTimeoutSetting() * 15);  // 15, 30, 45, 60s
 		lockoutSeconds = timeoutSeconds;
 		
-		uint8_t delaySetting = getDelaySetting();
-		if(isRandomized())
-		{
-			// Do something random
-			delayMin = 0;
-			delayMax = 0;
-			switch(delaySetting)
-			{
-				case 0:
-					delayMin = 0;
-					delayMax = 5;
-					break;
-				case 1:
-					delayMin = 0;
-					delayMax = 10;
-					break;
-				case 2:
-					delayMin = 0;
-					delayMax = 15;
-					break;
-				case 3:
-					delayMin = 0;
-					delayMax = 20;
-					break;
-
-				case 4:
-					delayMin = 5;
-					delayMax = 15;
-					break;
-				case 5:
-					delayMin = 5;
-					delayMax = 20;
-					break;
-				case 6:
-					delayMin = 5;
-					delayMax = 25;
-					break;
-				case 7:
-					delayMin = 5;
-					delayMax = 30;
-					break;
-
-				case 8:
-					delayMin = 15;
-					delayMax = 30;
-					break;
-				case 9:
-					delayMin = 15;
-					delayMax = 40;
-					break;
-				case 10:
-					delayMin = 15;
-					delayMax = 50;
-					break;
-				case 11:
-					delayMin = 15;
-					delayMax = 60;
-					break;
-
-				case 12:
-					delayMin = 30;
-					delayMax = 60;
-					break;
-				case 13:
-					delayMin = 30;
-					delayMax = 120;
-					break;
-
-				case 14:
-					delayMin = 60;
-					delayMax = 120;
-					break;
-				case 15:
-					delayMin = 60;
-					delayMax = 300;
-					break;
-			}
-			delaySeconds = (random() % (delayMax - delayMin + 1)) + delayMin;
-		}
-		else
-		{
-			// Fixed delays
-			delaySeconds = delaySetting * 5;
-		}
 
 		wdt_reset();
 
@@ -355,7 +282,129 @@ int main(void)
 
 				if(NONE != dir)
 				{
-					srandom(getMillis());  // Re-seed the random generator for next time
+					if(first)
+					{
+						srandom(getMillis());  // Seed the random generator
+						first = false;
+					}
+
+					uint8_t delaySetting = getDelaySetting();
+					if(isRandomized())
+					{
+						// Do something random
+						delayMin = 0;
+						delayMax = 0;
+						delayPcnt = DELAY_PCNT_NONE;
+						switch(delaySetting)
+						{
+							// Simple Ranges
+							case 0:
+								delayMin = 0;
+								delayMax = 10;
+								break;
+							case 1:
+								delayMin = 5;
+								delayMax = 20;
+								break;
+							case 2:
+								delayMin = 15;
+								delayMax = 30;
+								break;
+							case 3:
+								delayMin = 30;
+								delayMax = 60;
+								break;
+							// Bimodal range 15-30s
+							case 4:
+								delayMin = 15;
+								delayMax = 30;
+								delayPcnt = DELAY_PCNT_LOW;
+								break;
+							case 5:
+								delayMin = 15;
+								delayMax = 30;
+								delayPcnt = DELAY_PCNT_MID;
+								break;
+							case 6:
+								delayMin = 15;
+								delayMax = 30;
+								delayPcnt = DELAY_PCNT_HIGH;
+								break;
+							// Bimodal range 30-60s
+							case 7:
+								delayMin = 30;
+								delayMax = 60;
+								delayPcnt = DELAY_PCNT_LOW;
+								break;
+							case 8:
+								delayMin = 30;
+								delayMax = 60;
+								delayPcnt = DELAY_PCNT_MID;
+								break;
+							case 9:
+								delayMin = 30;
+								delayMax = 60;
+								delayPcnt = DELAY_PCNT_HIGH;
+								break;
+							// Bimodal range 60-120s
+							case 10:
+								delayMin = 60;
+								delayMax = 120;
+								delayPcnt = DELAY_PCNT_LOW;
+								break;
+							case 11:
+								delayMin = 60;
+								delayMax = 120;
+								delayPcnt = DELAY_PCNT_MID;
+								break;
+							case 12:
+								delayMin = 60;
+								delayMax = 120;
+								delayPcnt = DELAY_PCNT_HIGH;
+								break;
+							// Bimodal range 180-300s
+							case 13:
+								delayMin = 180;
+								delayMax = 300;
+								delayPcnt = DELAY_PCNT_LOW;
+								break;
+							case 14:
+								delayMin = 180;
+								delayMax = 300;
+								delayPcnt = DELAY_PCNT_MID;
+								break;
+							case 15:
+								delayMin = 180;
+								delayMax = 300;
+								delayPcnt = DELAY_PCNT_HIGH;
+								break;
+						}
+						// https://c-faq.com/lib/randrange.html
+						if( (DELAY_PCNT_LOW == delayPcnt) && (random() < ((uint32_t)RANDOM_MAX+1u) / 10 * 9) )
+						{
+							// No delay 90% of the time
+							delaySeconds = 1;  // Some minimal delay
+						}
+						else if( (DELAY_PCNT_MID == delayPcnt) && (random() < ((uint32_t)RANDOM_MAX+1u) / 10 * 7) )
+						{
+							// No delay 70% of the time
+							delaySeconds = 1;  // Some minimal delay
+						}
+						else if( (DELAY_PCNT_HIGH == delayPcnt) && (random() < ((uint32_t)RANDOM_MAX+1u) / 4) )
+						{
+							// No delay 25% of the time
+							delaySeconds = 1;  // Some minimal delay
+						}
+						else
+						{
+							delaySeconds = delayMin + random() / (RANDOM_MAX / (delayMax - delayMin + 1) + 1);
+						}
+					}
+					else
+					{
+						// Fixed delays
+						delaySeconds = delaySetting * 5;
+					}
 
 					ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 					{
