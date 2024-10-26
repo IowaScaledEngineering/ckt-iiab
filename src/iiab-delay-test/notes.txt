@@ -1,0 +1,2 @@
+stty -F /dev/ttyUSB1 115200
+(stty raw; cat > delayNN.log) < /dev/ttyUSB1
