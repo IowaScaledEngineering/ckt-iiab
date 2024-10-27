@@ -170,6 +170,8 @@ void init(void)
 
 	initializeTimer();
 
+	initializeInputOutput();
+
 	signalHeadInitialize(&signalA);
 	signalHeadInitialize(&signalB);
 
@@ -196,61 +198,76 @@ int main(void)
 	DelayPcnt delayPcnt;
 	InterlockState state = STATE_IDLE;
 	bool first = true;
+	uint8_t dipSetting, oldDipSetting;
 	
 	// Application initialization
 	init();
-	initializeInputOutput();
 
-	signalHeadOptions = isCommonAnode()?SIGNAL_OPTION_COMMON_ANODE:0;
+	signalHeadOptions = isCommonAnode()?SIGNAL_OPTION_COMMON_ANODE:0;  // Get CA/CC info before startup test (ignores searchlight mode)
 
 	wdt_reset();
 
-	// Initialization, board check
+	// Initialization, board check, init debouncers
 	setStatusLed(STATUS_OFF);
-	_delay_ms(500);
+	readInputs();
+	readDipSwitches();
+	_delay_ms(200);
 	wdt_reset();
 	
 	signalHeadAspectSet(&signalA, ASPECT_GREEN);
-	_delay_ms(500);
+	readInputs();
+	readDipSwitches();
+	_delay_ms(300);
 	wdt_reset();
 
 	signalHeadAspectSet(&signalA, ASPECT_RED);
-	_delay_ms(500);
+	readInputs();
+	readDipSwitches();
+	_delay_ms(300);
 	wdt_reset();
 	
 	signalHeadAspectSet(&signalB, ASPECT_GREEN);
-	_delay_ms(500);
+	readInputs();
+	readDipSwitches();
+	_delay_ms(300);
 	wdt_reset();
 
 	signalHeadAspectSet(&signalB, ASPECT_RED);
-	_delay_ms(500);
+	readInputs();
+	readDipSwitches();
+	_delay_ms(300);
 	wdt_reset();
 
+
+
 	setStatusLed(STATUS_RED);
-	_delay_ms(500);
+	_delay_ms(200);
 	wdt_reset();
 
 	setStatusLed(STATUS_YELLOW);
-	_delay_ms(500);
+	_delay_ms(200);
 	wdt_reset();
 
 	setStatusLed(STATUS_GREEN);
-	_delay_ms(500);
+	_delay_ms(200);
 	wdt_reset();
 
 	setStatusLed(STATUS_BLUE);
-	_delay_ms(500);
+	_delay_ms(200);
 	wdt_reset();
 
 	setStatusLed(STATUS_PURPLE);
-	_delay_ms(500);
+	_delay_ms(200);
 	wdt_reset();
 
 	setStatusLed(STATUS_WHITE);
-	_delay_ms(500);
+	_delay_ms(200);
 	wdt_reset();
 
 	setStatusLed(STATUS_OFF);
+
+	dipSetting = getDipSetting();  // Preload with current value
+	oldDipSetting = dipSetting;
 	
 	clearInterlocking();
 
@@ -260,9 +277,11 @@ int main(void)
 		
 		readInputs();
 		readDipSwitches();
+
+		signalHeadOptions = (isCommonAnode()?SIGNAL_OPTION_COMMON_ANODE:0) | (isSearchlight()?SIGNAL_OPTION_SEARCHLIGHT:0); 
+
 		timeoutSeconds = 15 + (getTimeoutSetting() * 15);  // 15, 30, 45, 60s
 		lockoutSeconds = timeoutSeconds;
-		
 
 		wdt_reset();
 
@@ -271,6 +290,17 @@ int main(void)
 		{
 			case STATE_IDLE:
 				setStatusLed(STATUS_OFF);
+				
+				// Blink LED when DIP switches change
+				dipSetting = getDipSetting();
+				if(oldDipSetting != dipSetting)
+				{
+					setStatusLed(STATUS_RED);
+					_delay_ms(50);
+					setStatusLed(STATUS_OFF);
+					oldDipSetting = dipSetting;
+				}
+				
 				if( approachBlockOccupancy(APPROACH_A) && !lockoutTimer )
 				{
 					dir = APPROACH_A;
@@ -416,7 +446,6 @@ int main(void)
 
 			case STATE_DELAY:
 				setStatusLed(STATUS_YELLOW);
-				// Do the delay stuff here
 				ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
 				{
 					temp_uint32 = delayTimer;
@@ -470,7 +499,7 @@ int main(void)
 					temp_uint32 = timeoutTimer;
 				}
 
-				// Give priority to turnouts, then occupancy, then timeout
+				// Give priority to occupancy then timeout
 				if(interlockingBlockOccupancy())
 				{
 					// Train has entered interlocking, proceed

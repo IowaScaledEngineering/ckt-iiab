@@ -34,6 +34,7 @@ extern uint32_t getMillis();
 
 void initializeInputOutput();
 void readDipSwitches();
+uint8_t getDipSetting();
 uint8_t getDelaySetting();
 uint8_t getTimeoutSetting();
 bool isRandomized();

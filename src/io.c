@@ -8,9 +8,9 @@
 #include "signalHead.h"
 
 DebounceState8_t inputDebouncer;
+DebounceState8_t dipDebouncer;
 
 extern volatile uint8_t signalHeadOptions;
-
 
 bool randomDelay;
 bool searchlight;
@@ -33,58 +33,79 @@ bool isCommonAnode(void)
 void readDipSwitches()
 {
 	uint8_t adcVal;
-	uint8_t newSignalHeadOptions = 0;
 
-	delaySetting = ~PINA & 0x0F;
-	
-	// Read ADC for random, searchlight
-	wdt_reset();
-	ADMUX &= ~(_BV(MUX2)); //  ADC3 (PA4)
-	ADMUX |= _BV(MUX1) | _BV(MUX0);
-	ADCSRA |= _BV(ADSC);  // Start the conversion
-	while(ADCSRA & _BV(ADSC));  // Wait for conversion to complete; no WD reset in case it takes too long
-	adcVal = ADCH;
-	if(adcVal > 212)
-	{
-		searchlight = 0;
-		randomDelay = 0;
-	}
-	else if(adcVal > 149)
-	{
-		searchlight = 1;
-		randomDelay = 0;
-	}
-	else if(adcVal > 115)
-	{
-		searchlight = 0;
-		randomDelay = 1;
-	}
-	else
-	{
-		searchlight = 1;
-		randomDelay = 1;
-	}
+	bool randomDelay_tmp;
+	bool searchlight_tmp;
+	uint8_t delaySetting_tmp;
+	uint8_t timeoutSetting_tmp;
 
-	// Read ADC for timeout
-	wdt_reset();
-	ADMUX |= _BV(MUX2); //  ADC4 (PA5)
-	ADMUX &= ~(_BV(MUX1) | _BV(MUX0));
-	ADCSRA |= _BV(ADSC);  // Start the conversion
-	while(ADCSRA & _BV(ADSC));  // Wait for conversion to complete; no WD reset in case it takes too long
-	adcVal = ADCH;
-	if(adcVal > 212)
-		timeoutSetting = 0;
-	else if(adcVal > 149)
-		timeoutSetting = 1;
-	else if(adcVal > 115)
-		timeoutSetting = 2;
-	else
-		timeoutSetting = 3;
+	static uint32_t lastRead = 0;
+	uint32_t millisTemp;
+	uint8_t currentDipState = 0;
+
+	millisTemp = getMillis();
+	if ((millisTemp - lastRead) > 10)
+	{
+		lastRead = millisTemp;
+
+		delaySetting_tmp = ~PINA & 0x0F;
 		
+		// Read ADC for random, searchlight
+		wdt_reset();
+		ADMUX &= ~(_BV(MUX2)); //  ADC3 (PA4)
+		ADMUX |= _BV(MUX1) | _BV(MUX0);
+		ADCSRA |= _BV(ADSC);  // Start the conversion
+		while(ADCSRA & _BV(ADSC));  // Wait for conversion to complete; no WD reset in case it takes too long
+		adcVal = ADCH;
+		if(adcVal > 212)
+		{
+			searchlight_tmp = false;
+			randomDelay_tmp = false;
+		}
+		else if(adcVal > 149)
+		{
+			searchlight_tmp = true;
+			randomDelay_tmp = false;
+		}
+		else if(adcVal > 115)
+		{
+			searchlight_tmp = false;
+			randomDelay_tmp = true;
+		}
+		else
+		{
+			searchlight_tmp = true;
+			randomDelay_tmp = true;
+		}
 
-	newSignalHeadOptions = isCommonAnode()?SIGNAL_OPTION_COMMON_ANODE:0;
-	newSignalHeadOptions |= searchlight?SIGNAL_OPTION_SEARCHLIGHT:0;
-	signalHeadOptions = newSignalHeadOptions;
+		// Read ADC for timeout
+		wdt_reset();
+		ADMUX |= _BV(MUX2); //  ADC4 (PA5)
+		ADMUX &= ~(_BV(MUX1) | _BV(MUX0));
+		ADCSRA |= _BV(ADSC);  // Start the conversion
+		while(ADCSRA & _BV(ADSC));  // Wait for conversion to complete; no WD reset in case it takes too long
+		adcVal = ADCH;
+		if(adcVal > 212)
+			timeoutSetting_tmp = 0;
+		else if(adcVal > 149)
+			timeoutSetting_tmp = 1;
+		else if(adcVal > 115)
+			timeoutSetting_tmp = 2;
+		else
+			timeoutSetting_tmp = 3;
+
+		currentDipState = (timeoutSetting_tmp << 6) | (searchlight_tmp?0x20:0) | (randomDelay_tmp?0x10:0) | delaySetting_tmp;
+		debounce8(currentDipState, &dipDebouncer);
+		timeoutSetting = getDebouncedState(&dipDebouncer) >> 6;
+		searchlight =    getDebouncedState(&dipDebouncer) == 0x20;
+		randomDelay =    getDebouncedState(&dipDebouncer) == 0x10;
+		delaySetting =   getDebouncedState(&dipDebouncer) & 0xF;
+	} 
+}
+
+uint8_t getDipSetting(void)
+{
+	return getDebouncedState(&dipDebouncer);
 }
 
 uint8_t getDelaySetting(void)
