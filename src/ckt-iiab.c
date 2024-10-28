@@ -551,9 +551,9 @@ int main(void)
 
 			case STATE_CLEARING:
 				setStatusLed(STATUS_PURPLE);
-				if(!approachBlockOccupancy(OPPOSITE_DIRECTION(dir)))
+				if(!approachBlockOccupancy(OPPOSITE_DIRECTION(dir)) && !interlockingBlockOccupancy())
 				{
-					// Opposite approach cleared
+					// Opposite approach and interlocking cleared
 					state = STATE_RESET;
 				}
 				break;
