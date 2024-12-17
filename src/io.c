@@ -88,17 +88,17 @@ void readDipSwitches()
 		if(adcVal > 212)
 			timeoutSetting_tmp = 0;
 		else if(adcVal > 149)
-			timeoutSetting_tmp = 1;
-		else if(adcVal > 115)
 			timeoutSetting_tmp = 2;
+		else if(adcVal > 115)
+			timeoutSetting_tmp = 1;
 		else
 			timeoutSetting_tmp = 3;
 
 		currentDipState = (timeoutSetting_tmp << 6) | (searchlight_tmp?0x20:0) | (randomDelay_tmp?0x10:0) | delaySetting_tmp;
 		debounce8(currentDipState, &dipDebouncer);
 		timeoutSetting = getDebouncedState(&dipDebouncer) >> 6;
-		searchlight =    getDebouncedState(&dipDebouncer) == 0x20;
-		randomDelay =    getDebouncedState(&dipDebouncer) == 0x10;
+		searchlight =    getDebouncedState(&dipDebouncer) & 0x20;
+		randomDelay =    getDebouncedState(&dipDebouncer) & 0x10;
 		delaySetting =   getDebouncedState(&dipDebouncer) & 0xF;
 	} 
 }
