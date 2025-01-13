@@ -57,6 +57,7 @@ help:
 	@echo "make flash ..... flash the firmware"
 	@echo "make fuse ...... flash the fuses"
 	@echo "make program ... flash fuses and firmware"
+	@echo "make firmware .. flash firmware from file"
 	@echo "make size ...... memory usage"
 	@echo "make read ...... read the fuses"
 	@echo "make clean ..... delete objects and hex file"
@@ -85,6 +86,9 @@ size:
 # rule for uploading firmware:
 flash: $(BASE_NAME).hex
 	$(AVRDUDE) -U flash:w:$(BASE_NAME).hex:i
+
+firmware:
+	$(AVRDUDE) -U flash:w:$(HEX):i
 
 # rule for deleting dependent files (those which can be built by Make):
 clean:
